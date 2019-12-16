@@ -17,4 +17,10 @@ Hints:
 	2. You may need to define two ways for localizing plates(yellow or other colors)
 """
 def plate_detection(image):
-	return plate_imgs
+	img = cv2.imread('frames/frame0.jpg')
+
+	img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+	edges = cv2.Canny(img_gray, 200, 170)
+	cv2.imshow('ImageWindow', edges)
+	cv2.waitKey(0)
+	cv2.destroyAllWindows()

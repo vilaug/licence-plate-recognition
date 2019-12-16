@@ -3,6 +3,7 @@ import os
 import pandas as pd
 import Localization
 import Recognize
+import csv
 
 """
 In this file, you will define your own CaptureFrame_Process funtion. In this function,
@@ -17,4 +18,26 @@ Inputs:(three)
 	3. save_path: final .csv file path
 Output: None
 """
-def CaptureFrame_Process(file_path, sample_frequency, save_path):
+
+
+def capture_frame_process(file_path, sample_frequency, save_path):
+    frames = 0
+    capture = cv2.VideoCapture(file_path)
+    count = 0
+    times = []
+    success, img = capture.read()
+
+    # while success:
+    #     cv2.imwrite("frames/frame%d.jpg" % count, img)  # save frame as JPEG file\
+    #     print('Read a new frame: ', len(times), ' at time: ', frames*sample_frequency, 's')
+    #     times.append(frames*sample_frequency)
+    #     count += 1
+    #     frames += 1
+    #     success, img = capture.read()
+    #
+    # with open('frames/frame_times.txt', 'w') as f:
+    #     f.write("[")
+    #     for item in times:
+    #             f.write("%s," % item)
+    #     f.write("]")
+    Localization.plate_detection(img)
