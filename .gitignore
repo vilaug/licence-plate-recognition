@@ -1,6 +1,6 @@
-**/cropped/
-**/processed/
-**/frames/
+**/cropped/**
+**/processed/**
+**/frames/**
 
 
 # Byte-compiled / optimized / DLL files
