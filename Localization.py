@@ -19,111 +19,121 @@ Hints:
 """
 
 
-def plate_detection(image, file_path, write, frame, video):
+def plate_detection(image, file_path, write, video, frame):
     if write:
-        cropped = extract_plate(image)
-        if cropped != '':
-            crop_file_path = file_path + "/cropped/video" + str(video) + "frame" + str(frame) + ".jpg"
-            cv2.imwrite(crop_file_path, cropped)
-            processed = process_plate(cropped, write)
-            processed_file_path = file_path + "/processed/video" + str(video) + "frame" + str(frame) + ".jpg"
-            cv2.imwrite(processed_file_path, processed)
+        cropped = extract_plate(image, write)
+        crop_file_path = file_path + "/cropped/video" + str(video) + "frame" + str(frame) + ".jpg"
+        cv2.imwrite(crop_file_path, cropped)
+        processed = process_plate(cropped, write)
+        processed_file_path = file_path + "/processed/video" + str(video) + "frame" + str(frame) + ".jpg"
+        cv2.imwrite(processed_file_path, processed)
     else:
         filename = file_path + "/frames/video" + str(video) + "frame" + str(frame) + ".jpg"
         img = cv2.imread(filename)
-        cropped = extract_plate(img)
+        cropped = extract_plate(img, write)
         process_plate(cropped, write)
 
 
-def extract_plate(image):
+def extract_plate(image, write):
     img_hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-    lower_yellow = np.array([15, 70, 110])
+    
+    # Apply Gaussian filter
+    
+    img_hsv = cv2.GaussianBlur(img_hsv, (5, 5), 0)
+    
+    # Mask the licence plate
+    lower_yellow = np.array([9, 70, 90])
     upper_yellow = np.array([30, 255, 255])
     mask = cv2.inRange(img_hsv, lower_yellow, upper_yellow)
     cv2.bitwise_and(image, image, mask=mask)
+    
+    # Dilate the image a bit while eroding so the edge is clearer
     kernel = np.ones((3, 3))
+    
     mask_ed = mask
     for x in range(2):
+        mask_ed = cv2.dilate(mask_ed, kernel, iterations=3)
         mask_ed = cv2.erode(mask_ed, kernel, iterations=2)
-        mask_ed = cv2.dilate(mask_ed, kernel, iterations=2)
     
-    mask_edges = cv2.Canny(mask_ed, 200, 200)
-    pts = np.argwhere(mask_edges > 0)
-    if len(pts) > 0:
-        y1, x1 = pts.min(axis=0)
-        y2, x2 = pts.max(axis=0)
-        cropped = image[y1:y2, x1:x2]
-        return cropped
-    return ''
+    # Apply canny, 1st threshold is 1/3 of the maximum
+    
+    canny = cv2.Canny(mask_ed, 255 / 3, 255, 3)
+    
+    # Find contours and sort them and save the largest one as the cropped image
+    cnts, hierarchy = cv2.findContours(canny.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    cnts = sorted(cnts, key=cv2.contourArea, reverse=True)
+    rect = cv2.minAreaRect(cnts[0])
+    box = cv2.boxPoints(rect)
+    (x, y), (width, height), angle = rect
+    
+    box = np.int0(box)
+    m, rotated, cropped = None, None, None
+    
+    rect_size = (int(width), int(height))
+    rect_center = (int(x), int(y))
+    if angle < -45.:
+        angle += 90.0;
+        rect_size = swap(rect_size[0], rect_size[1])
+    m = cv2.getRotationMatrix2D((x, y), angle, 1.0)
+    rotated = cv2.warpAffine(image, m, (image.shape[1], image.shape[0]), cv2.INTER_CUBIC)
+    cropped = cv2.getRectSubPix(rotated, rect_size, rect_center)
+    if not write:
+        cv2.imshow('Contours', cropped)
+        cv2.waitKey(0)
+    return cropped
+
+
+def swap(a, b):
+    return b, a
 
 
 def process_plate(image, write):
-    image = image.astype('uint8')
+    # Convert to gray and equalize histogram
     img_gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    img_gray = img_gray.astype('uint8')
+    
+
     img_eq = cv2.equalizeHist(img_gray)
+    blur = img_eq
+    blur = cv2.GaussianBlur(blur, (5, 5), 0)
+    
+
+    th3 = cv2.adaptiveThreshold(blur, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY,9, 2)
+    th2 = cv2.adaptiveThreshold(blur, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 9, 2)
+    
     
     # plt.hist(img_eq.ravel(), 256)
     # plt.show()
-    kernel_3x3 = np.array([[1, 2, 1], [2, 4, 2], [1, 2, 1]])
-    kernel_3x3 = kernel_3x3 * (1 / kernel_3x3.sum())
-    img_filter = cv2.filter2D(img_eq, -1, kernel_3x3)
     
-    ret, threshold = cv2.threshold(img_filter, find_iso_threshold(img_gray), 255, cv2.THRESH_BINARY)
+    # Apply gaussian filter
+    
+    # Threshold
+    
+    # th3 = cv2.adaptiveThreshold(img_filter, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
+    # ret, threshold = cv2.threshold(img_filter, find_iso_threshold(img_gray), 255, cv2.THRESH_BINARY)
+
+    kernel = np.ones((3, 3))
+    
+    # Morph, does not work
+    img_morphed = th3
+    img_morphed = cv2.dilate(img_morphed, kernel)
+    img_morphed = cv2.erode(img_morphed, kernel)
+    
+    for x in range(1000):
+        img_morphed = cv2.morphologyEx(img_morphed, cv2.MORPH_OPEN, kernel)
+    
     if not write:
+        cv2.imshow('Contrast enhanced with Gaussian and equalized', blur)
+        cv2.waitKey(0)
         cv2.imshow('Equalized', img_eq)
         cv2.waitKey(0)
-        cv2.imshow('Contrast enhanced with Gaussian and equalized', img_filter)
+        cv2.imshow('Threshold with Median', th3)
         cv2.waitKey(0)
-        cv2.imshow('Threshold with ISO data', threshold)
+
+        cv2.imshow('Threshold with Gaussian', th2)
         cv2.waitKey(0)
-    kernel = np.ones((3, 3))
-    img_morphed = threshold
-    for x in range(2):
-        img_morphed = cv2.erode(img_morphed, kernel, iterations=1)
-        img_morphed = cv2.dilate(img_morphed, kernel, iterations=1)
-    
-    return threshold
-
-
-def find_iso_threshold(img):
-    e = 0.2
-    hist, bins = np.histogram(img.ravel(), 256, [0, 256])
-    t = (1 + 255) / 2
-    if img.shape[0] > 0 and img.shape[1] > 0:
+        cv2.imshow('Morphed binary', img_morphed)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
         
-        gmin = np.amin(img)
-        gmax = np.amax(img)
-        i = gmin + 1
-        
-        while True:
-            nominator = 0
-            denominator = 0
-            for j in range(gmin, i):
-                nominator += j * hist[j]
-                denominator += hist[j]
-            if denominator != 0:
-                m1 = nominator / denominator
-            else:
-                m1 = 0
-            nominator = 0
-            denominator = 0
-            for j in range(i, gmax + 1):
-                nominator += j * hist[j]
-                denominator += hist[j]
-            if denominator != 0:
-                m2 = nominator / denominator
-            else:
-                m2 = 0
-            
-            new_t = (m1 + m2) / 2
-            i += 1
-            
-            difference = abs(t - new_t)
-            if difference > e:
-                t = new_t
-            else:
-                new_t = t
-                break
-            if i == gmax + 1:
-                break
-    return t
+    return img_morphed

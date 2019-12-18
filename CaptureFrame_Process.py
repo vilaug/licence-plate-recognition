@@ -39,7 +39,7 @@ def capture_frame_process(file_path, sample_frequency, save_path):
                         print('Read a new frame: ', frame, ' at time: ', frame * sample_frequency, 's')
                         times.append(frame * sample_frequency)
                         frame += 1
-                        Localization.plate_detection(img, file_path, True, frame, video)
+                        Localization.plate_detection(img, file_path, True, video , frame)
                         success, img = capture.read()
     
                     text_file_path = file_path + '/frames/frame' + str(video) + '_times.txt'
@@ -50,4 +50,4 @@ def capture_frame_process(file_path, sample_frequency, save_path):
                         f.write("]")
                     video+=1
     else:
-        Localization.plate_detection(0, file_path, False, 0, 1)
+        Localization.plate_detection(0, file_path, False, 18, 4)
