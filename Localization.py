@@ -17,10 +17,30 @@ Hints:
 	2. You may need to define two ways for localizing plates(yellow or other colors)
 """
 def plate_detection(image):
-	img = cv2.imread('frames/frame0.jpg')
 
-	img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-	edges = cv2.Canny(img_gray, 200, 170)
-	cv2.imshow('ImageWindow', edges)
-	cv2.waitKey(0)
-	cv2.destroyAllWindows()
+	for i in range(2091):
+		img = cv2.imread('frames/frame%d.jpg' % i)
+		img_hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+
+		lower_yellow = np.array([15, 70, 110])
+		upper_yellow = np.array([30, 255, 255])
+		mask = cv2.inRange(img_hsv, lower_yellow, upper_yellow)
+		res = cv2.bitwise_and(img, img, mask=mask)
+
+		kernel = np.ones((3,3))
+		mask_ed = mask
+
+		for x in range(2):
+			mask_ed = cv2.erode(mask_ed, kernel, iterations=2)
+			mask_ed = cv2.dilate(mask_ed, kernel, iterations=2)
+
+
+
+		mask_edges = cv2.Canny(mask_ed, 200, 200)
+		pts = np.argwhere(mask_edges > 0);
+		if(len(pts)>0):
+			y1, x1 = pts.min(axis=0)
+			y2, x2 = pts.max(axis=0)
+			cropped = img[y1:y2, x1:x2]
+			print(i)
+			cv2.imwrite('cropped/frame%d.jpg' % i, cropped)  # save frame as JPEG file\
