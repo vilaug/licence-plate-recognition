@@ -21,23 +21,33 @@ Output: None
 
 
 def capture_frame_process(file_path, sample_frequency, save_path):
-    frames = 0
-    capture = cv2.VideoCapture(file_path)
-    count = 0
-    times = []
-    success, img = capture.read()
-
-    # while success:
-    #     cv2.imwrite("frames/frame%d.jpg" % count, img)  # save frame as JPEG file\
-    #     print('Read a new frame: ', len(times), ' at time: ', frames*sample_frequency, 's')
-    #     times.append(frames*sample_frequency)
-    #     count += 1
-    #     frames += 1
-    #     success, img = capture.read()
-    #
-    # with open('frames/frame_times.txt', 'w') as f:
-    #     f.write("[")
-    #     for item in times:
-    #             f.write("%s," % item)
-    #     f.write("]")
-    Localization.plate_detection(img)
+    if False:
+        video = 0;
+        directory = os.fsencode(file_path)
+        
+        for file in os.listdir(directory):
+            filename = os.fsdecode(file)
+            if filename.endswith(".avi"):
+                    frame = 0
+                    times = []
+                    filename = file_path + "/"+filename
+                    capture = cv2.VideoCapture(filename)
+                    success, img = capture.read()
+                    while success:
+                        image_file_path = file_path+"/frames/video" + str(video) + "frame" + str(frame) + ".jpg"
+                        cv2.imwrite(image_file_path, img)  # save frame as JPEG file\
+                        print('Read a new frame: ', frame, ' at time: ', frame * sample_frequency, 's')
+                        times.append(frame * sample_frequency)
+                        frame += 1
+                        Localization.plate_detection(img, file_path, True, frame, video)
+                        success, img = capture.read()
+    
+                    text_file_path = file_path + '/frames/frame' + str(video) + '_times.txt'
+                    with open(text_file_path, 'w') as f:
+                        f.write("[")
+                        for item in times:
+                            f.write("%s," % item)
+                        f.write("]")
+                    video+=1
+    else:
+        Localization.plate_detection(0, file_path, False, 0, 1)
