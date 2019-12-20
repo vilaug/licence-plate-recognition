@@ -27,11 +27,13 @@ def plate_detection(image, file_path, write, video, frame):
         processed = process_plate(cropped, write)
         processed_file_path = file_path + "/processed/video" + str(video) + "frame" + str(frame) + ".jpg"
         cv2.imwrite(processed_file_path, processed)
+
     else:
         filename = file_path + "/frames/video" + str(video) + "frame" + str(frame) + ".jpg"
+        print(filename)
         img = cv2.imread(filename)
         cropped = extract_plate(img, write)
-        process_plate(cropped, write)
+        return process_plate(cropped, write)
 
 
 def extract_plate(image, write):
@@ -77,7 +79,7 @@ def extract_plate(image, write):
     m = cv2.getRotationMatrix2D((x, y), angle, 1.0)
     rotated = cv2.warpAffine(image, m, (image.shape[1], image.shape[0]), cv2.INTER_CUBIC)
     cropped = cv2.getRectSubPix(rotated, rect_size, rect_center)
-    if not write:
+    if not True:
         cv2.imshow('Contours', cropped)
         cv2.waitKey(0)
     return cropped
@@ -89,14 +91,17 @@ def swap(a, b):
 
 def process_plate(image, write):
     # Convert to gray and equalize histogram
+    image = cv2.GaussianBlur(image, (5,5), 0)
+    return image
     img_gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     img_gray = img_gray.astype('uint8')
     
 
     img_eq = cv2.equalizeHist(img_gray)
     blur = img_eq
-    blur = cv2.GaussianBlur(blur, (5, 5), 0)
-    
+    blur = cv2.GaussianBlur(blur, (3, 3), 0)
+
+    return blur
 
     th3 = cv2.adaptiveThreshold(blur, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY,9, 2)
     th2 = cv2.adaptiveThreshold(blur, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 9, 2)
@@ -122,7 +127,7 @@ def process_plate(image, write):
     for x in range(1000):
         img_morphed = cv2.morphologyEx(img_morphed, cv2.MORPH_OPEN, kernel)
     
-    if not write:
+    if not True:
         cv2.imshow('Contrast enhanced with Gaussian and equalized', blur)
         cv2.waitKey(0)
         cv2.imshow('Equalized', img_eq)
@@ -136,4 +141,4 @@ def process_plate(image, write):
         cv2.waitKey(0)
         cv2.destroyAllWindows()
         
-    return img_morphed
+    return th2
