@@ -34,13 +34,13 @@ def capture_frame_process(file_path, sample_frequency, save_path):
                     capture = cv2.VideoCapture(filename)
                     success, img = capture.read()
                     while success:
-                        image_file_path = file_path+"/frames/video" + str(video) + "frame" + str(frame) + ".jpg"
-                        cv2.imwrite(image_file_path, img)  # save frame as JPEG file\
-                        print('Read a new frame: ', frame, ' at time: ', frame * sample_frequency, 's')
+                        #image_file_path = file_path+"/frames/video" + str(video) + "frame" + str(frame) + ".jpg"
+                        #cv2.imwrite(image_file_path, img)  # save frame as JPEG file\
+                        print('Video ', video, ' frame: ', frame, ' at time: ', frame * sample_frequency, 's')
                         times.append(frame * sample_frequency)
                         frame += 1
-                        Localization.plate_detection(img, file_path, True, video , frame)
-                        #Recognize.segment_and_recognize(img, file_path, True, video, frame)
+                        cropped = Localization.plate_detection(img, False)
+                        characters = Recognize.segment_and_recognize(cropped, False)
                         success, img = capture.read()
     
                     text_file_path = file_path + '/frames/frame' + str(video) + '_times.txt'
@@ -51,7 +51,9 @@ def capture_frame_process(file_path, sample_frequency, save_path):
                         f.write("]")
                     video+=1
     else:
-        processed = Localization.plate_detection(0, file_path, False, 3, 5)
-        Recognize.segment_and_recognize(processed, file_path, False, 2, 1)
+        filename = file_path + "/frames/video" + str(1) + "frame" + str(1) + ".jpg"
+        img = cv2.imread(filename)
+        cropped = Localization.plate_detection(img, False)
+        characters = Recognize.segment_and_recognize(cropped, False)
 
 

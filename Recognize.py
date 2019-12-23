@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 import os
+import skimage.filters as sk
 
 """
 In this file, you will define your own segment_and_recognize function.
@@ -19,7 +20,8 @@ Hints:
 """
 
 
-def segment_and_recognize(image, file_path, write, video, frame):
+## Write - boolean ar rasyt ar testuojant daryt kazka
+def segment_and_recognize(image, write):
     if write:
         characters = segment(image, write)
     else:
@@ -27,30 +29,50 @@ def segment_and_recognize(image, file_path, write, video, frame):
 
 
 def segment(image, write):
-    image_edges = cv2.Canny(image, 255 / 3, 255)
-    cv2.imshow('contour', image_edges)
-    cv2.waitKey(0)
+    image_gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    image_gray = cv2.equalizeHist(image_gray)
+    #blur = cv2.GaussianBlur(image_gray, (5, 5), 0)
+    isodata_threshold = sk.threshold_isodata(image_gray)
+    print(isodata_threshold)
+    ret3, th3 = cv2.threshold(image_gray, isodata_threshold, 255, cv2.THRESH_BINARY)
 
+    image_edges = cv2.Canny(th3, 255 / 3, 255)
+    cv2.imshow('contour', th3)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
+    
+    
     cnts, hierarchy = cv2.findContours(image_edges.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-    cnts = sorted(cnts, key=cv2.contourArea,  reverse=True)
+    cnts = sorted(cnts, key=lambda cnt: cv2.arcLength(cnt, True), reverse=True)
     rcts = []
     for i in range(len(cnts)):
         x, y, w, h = cv2.boundingRect(cnts[i])
-        if w/h < 0.7 and h/w > 1.5:
+        print( x, y, w, h)
+        if w / h < 0.73 and h / w > 1.4:
             if (x, y, w, h) not in rcts:
-                rcts.append(cv2.boundingRect(cnts[i]))
+                flag = True
+                
+                for rct in rcts:
+                    x1, y1, w1, h1 = rct
+                    if (x1 >= x and x1 <= x + w) or (x1 <= x and x1 + w1 >= x):
+                        flag = False
+                
+                if flag:
+                    print('added')
+                    rcts.append(cv2.boundingRect(cnts[i]))
 
-
+        cv2.drawContours(image, [cnts[i]], -1, (0, 255, 0), 3)
+        cv2.imshow('contour', image)
+        cv2.waitKey(0)
+    
     rcts = sorted(rcts, key=lambda tup: tup[0])
-
+    
     for i in range(6):
         x, y, w, h = rcts[i]
         print(rcts[i])
-        cv2.rectangle(image, (x, y), (x + w, y + h), (0, 255, 0), 2)
+        cv2.rectangle(image, (x, y), (x + w, y + h), (0, 50 * i, 0), 2)
         cv2.imshow('contour', image)
         cv2.waitKey(0)
-
-
-
+    
     cv2.imshow('edges', image_edges)
     cv2.waitKey(0)
