@@ -108,11 +108,11 @@ def segment(image, debug):
             cv2.destroyAllWindows()
 
         if width / height < 0.9 and height / width > 1.1 and height > image.shape[0] * 0.5:
-            possible_chars.append(segment)
+            possible_chars.append(curr_segment)
 
     cv2.destroyAllWindows()
     if len(possible_chars) == 6:
-        return get_characters(possible_chars)
+        return get_characters(possible_chars, debug)
 
     return None
 

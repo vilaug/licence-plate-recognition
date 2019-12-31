@@ -82,8 +82,8 @@ def capture_frame_process(file_path, sample_frequency, save_path, debug):
                     if (frame - 1) % 6 == 0:
                         cropped = Localization.plate_detection(img, debug)
                         if cropped is not None:
-                            # name = file_path + '/cropped/video' + str(video) + 'frame' + str(frame) + '.png'
-                            # cv2.imwrite(name, cropped)
+                            #name = file_path + '/cropped/video' + str(video) + 'frame' + str(frame) + '.png'
+                            #cv2.imwrite(name, cropped)
                             characters = Recognize.segment_and_recognize(cropped, debug)
                             if characters is not None:
                                 print('Video ', video, ' frame: ', frame, ' at time: ', frame * sample_frequency, 's')
@@ -91,13 +91,6 @@ def capture_frame_process(file_path, sample_frequency, save_path, debug):
                     success, img = capture.read()
                     frame += 1
 
-                # Write frame times
-                text_file_path = file_path + '/frames/frame' + str(video) + '_times.txt'
-                with open(text_file_path, 'w') as f:
-                    f.write("[")
-                    for item in times:
-                        f.write("%s," % item)
-                        f.write("]")
                 video += 1
     else:
         # used for debugging
