@@ -1,7 +1,14 @@
 import cv2
 import numpy as np
-import os
-import skimage.filters as sk
+import matplotlib.pyplot as plt
+import sys
+from skimage.filters import sobel
+from skimage import morphology
+from scipy import ndimage as ndi
+from skimage.metrics import structural_similarity as ssim
+from Characters import extractFromTTF
+from sklearn import cluster
+import string
 
 """
 In this file, you will define your own segment_and_recognize function.
@@ -20,59 +27,126 @@ Hints:
 """
 
 
-## Write - boolean ar rasyt ar testuojant daryt kazka
-def segment_and_recognize(image, write):
-    if write:
-        characters = segment(image, write)
-    else:
-        segment(image, write)
+def segment_and_recognize(image, debug):
+    return segment(image, debug)
 
 
-def segment(image, write):
+def segment(image, debug):
+    # Resize the image, convert to gray and equalize histogram
+    image = cv2.resize(image, (int(image.shape[1] * (100 / image.shape[0])), 100))
     image_gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     image_gray = cv2.equalizeHist(image_gray)
-    #blur = cv2.GaussianBlur(image_gray, (5, 5), 0)
-    isodata_threshold = sk.threshold_isodata(image_gray)
-    print(isodata_threshold)
-    ret3, th3 = cv2.threshold(image_gray, isodata_threshold, 255, cv2.THRESH_BINARY)
 
-    image_edges = cv2.Canny(th3, 255 / 3, 255)
-    cv2.imshow('contour', th3)
-    cv2.waitKey(0)
+    # Apply bilateral filter
+    blur1 = cv2.bilateralFilter(image_gray, 5, 150, 150)
+    if debug:
+        cv2.imshow('Contrast enhanced and equalized', blur1)
+        cv2.waitKey()
+
+    # Find elevation map from sobel edge detection
+    elevation_map = sobel(blur1)
+
+    # find 3 largest clusters and place markers there. 1st should always be the letters
+    # Could be improved
+    means = cluster.KMeans(n_clusters=3, max_iter=300, algorithm="elkan").fit(blur1.reshape(-1, 1))
+    centers = means.cluster_centers_
+    centers = sorted(centers)
+
+    markers = np.zeros_like(blur1)
+    markers[image_gray < centers[0]] = 2
+    markers[image_gray > centers[1]] = 1
+    segmentation = morphology.watershed(elevation_map, markers)
+
+    if debug:
+        fig, ax = plt.subplots(figsize=(4, 3))
+        ax.imshow(segmentation, cmap=plt.cm.gray, interpolation='nearest')
+        ax.axis('off')
+        ax.set_title('segmentation')
+        fig.show()
+        np.set_printoptions(threshold=sys.maxsize)
+
+    # Fill the holes
+    segmentation_fill = ndi.binary_fill_holes(segmentation - 1)
+    np.set_printoptions(threshold=sys.maxsize)
+    if debug:
+        fig, ax = plt.subplots(figsize=(4, 3))
+        ax.imshow(segmentation_fill, cmap=plt.cm.gray, interpolation='nearest')
+        ax.axis('off')
+        ax.set_title('fill')
+        fig.show()
+
+    # Change to greyscale image
+    segmentation_s = np.where(segmentation_fill, 0, 255)
+    segmentation_s = segmentation_s.astype(np.uint8)
+    if debug:
+        cv2.imshow('seg', segmentation_s)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
+
+    # Erode
+    segmentation_s = cv2.dilate(segmentation_s, np.ones((5, 5)), iterations=1)
+    segmentation_s = cv2.erode(segmentation_s, np.ones((3, 3)), iterations=1)
+    segmentation_s = cv2.dilate(segmentation_s, np.ones((3, 3)), iterations=1)
+    segmentation_s = cv2.erode(segmentation_s, np.ones((5, 5)), iterations=1)
+
+    # Get labeled image segments
+    segmentation_fill = np.where(segmentation_s == 255, False, True)
+    labeled_coins, n_objects = ndi.label(segmentation_fill)
+    slices = ndi.find_objects(labeled_coins)
+    slices = sorted(slices, key=lambda slice: slice[1].start)
+    possible_chars = []
+    for i in range(n_objects):
+        curr_segment = segmentation[slices[i]]
+        curr_segment = np.where(curr_segment > 1, 0, 255)
+        curr_segment = curr_segment.astype(np.uint8)
+        (height, width) = curr_segment.shape
+        # print(width/height, height/width)
+        if debug:
+            cv2.imshow('segment', curr_segment)
+
+            cv2.waitKey()
+            cv2.destroyAllWindows()
+
+        if width / height < 0.9 and height / width > 1.1 and height > image.shape[0] * 0.5:
+            possible_chars.append(segment)
+
     cv2.destroyAllWindows()
-    
-    
-    cnts, hierarchy = cv2.findContours(image_edges.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-    cnts = sorted(cnts, key=lambda cnt: cv2.arcLength(cnt, True), reverse=True)
-    rcts = []
-    for i in range(len(cnts)):
-        x, y, w, h = cv2.boundingRect(cnts[i])
-        print( x, y, w, h)
-        if w / h < 0.73 and h / w > 1.4:
-            if (x, y, w, h) not in rcts:
-                flag = True
-                
-                for rct in rcts:
-                    x1, y1, w1, h1 = rct
-                    if (x1 >= x and x1 <= x + w) or (x1 <= x and x1 + w1 >= x):
-                        flag = False
-                
-                if flag:
-                    print('added')
-                    rcts.append(cv2.boundingRect(cnts[i]))
+    if len(possible_chars) == 6:
+        return get_characters(possible_chars)
 
-        cv2.drawContours(image, [cnts[i]], -1, (0, 255, 0), 3)
-        cv2.imshow('contour', image)
-        cv2.waitKey(0)
-    
-    rcts = sorted(rcts, key=lambda tup: tup[0])
-    
-    for i in range(6):
-        x, y, w, h = rcts[i]
-        print(rcts[i])
-        cv2.rectangle(image, (x, y), (x + w, y + h), (0, 50 * i, 0), 2)
-        cv2.imshow('contour', image)
-        cv2.waitKey(0)
-    
-    cv2.imshow('edges', image_edges)
-    cv2.waitKey(0)
+    return None
+
+
+def get_characters(chars, debug):
+    stock_chars, stock_numbers = extractFromTTF.get_stock_characters()
+    recognized_chars = ""
+    characters = string.digits + string.ascii_uppercase
+
+    # TODO implement character/digit combination check
+
+    # Go through each char and calculate mean square error, maybe switch to SSIM
+    for (i, char) in enumerate(chars):
+        errors = np.zeros((len(stock_chars), 2))
+        for (j, stock_char) in enumerate(stock_chars):
+            number = cv2.resize(stock_char, (char.shape[1], char.shape[0]))
+            error = mse(char, number)
+            errors[j] = [j, error]
+
+        # Sort the errors
+        errors = errors[errors[:, 1].argsort()]
+        if debug:
+            cv2.imshow('segment', char)
+            cv2.imshow('stock', stock_chars[int(errors[0][0])])
+
+            cv2.waitKey(0)
+        recognized_chars += characters[int(errors[0][0])]
+        if debug:
+            recognized_chars += '(' + characters[int(errors[1][0])] + ')'
+    return recognized_chars
+
+
+def mse(imageA, imageB):
+    err = np.sum((imageA.astype("float") - imageB.astype("float")) ** 2)
+    err /= float(imageA.shape[0] * imageA.shape[1])
+
+    return err

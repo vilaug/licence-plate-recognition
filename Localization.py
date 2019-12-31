@@ -1,6 +1,9 @@
+import sys
+
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy import ndimage as ndi
 
 """
 In this file, you need to define plate_detection function.
@@ -19,114 +22,71 @@ Hints:
 """
 
 
-def plate_detection(image, write):
-    return extract_plate(image, write)
+def plate_detection(image, debug):
+    return extract_plate(image, debug)
 
 
-def extract_plate(image, write):
+def extract_plate(image, debug):
     img_hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
     # Apply Gaussian filter
-    
-    img_hsv = cv2.GaussianBlur(img_hsv, (5, 5), 0)
+
     # Mask the licence plate
-    lower_yellow = np.array([10, 70, 105])
+
+    img_hsv = cv2.GaussianBlur(img_hsv, (5, 5), 0)
+    lower_yellow = np.array([5, 100, 100])
     upper_yellow = np.array([30, 255, 255])
     mask = cv2.inRange(img_hsv, lower_yellow, upper_yellow)
     # Dilate the image a bit while eroding so the edge is clearer
-    kernel = np.ones((3, 3))
-    
-    # Apply canny, 1st threshold is 1/3 of the maximum
-    if False:
+
+    # Apply canny,
+    if debug:
         cv2.imshow('Mask', mask)
         cv2.waitKey(0)
         cv2.destroyAllWindows()
-    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel, iterations=10)
-    canny = cv2.Canny(mask, 255 / 3, 255, 3)
-    if False:
+    # Fill mask holes
+    mask = ndi.binary_fill_holes(mask)
+    mask = np.where(mask, 0, 255)
+    mask = mask.astype(np.uint8)
+    # mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel, iterations=10)
+
+    canny = cv2.Canny(mask, 60, 120, 3)
+    if debug:
         cv2.imshow('Mask Edges', canny)
         cv2.waitKey(0)
     # Find contours and sort them and save the largest one as the cropped image
+
+    # Find contours from edges and sort them by area
     cnts, hierarchy = cv2.findContours(canny.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-    cnts = sorted(cnts, key=lambda cnt: cv2.arcLength(cnt, True), reverse=True)
-    
+
+    cnts = sorted(cnts, key=lambda cnt: cv2.contourArea(cnt, False), reverse=True)
+    contour_img = image.copy()
     for cnt in cnts:
         rect = cv2.minAreaRect(cnt)
         box = cv2.boxPoints(rect)
-        if False:
-            cv2.drawContours(image, [cnt], -1, (0,255,0), 3)
-            cv2.imshow('image', image)
+
+        if debug:
+            cv2.drawContours(contour_img, [cnt], -1, (0, 255, 0), 3)
+            cv2.imshow('image', contour_img)
             cv2.waitKey(0)
+
         (x, y), (height, width), angle = rect
         if height > 0 and width > 0:
-            if width / height > 2.5 and height / width < 0.4 or height / width > 2.5 and width / height < 0.4:
-                box = np.int0(box)
-                m, rotated, cropped = None, None, None
+            # Check that the contour is the right shape
+            if (3 < width / height < 6 and 0.4 > height / width > 0.15) or (
+                    3 < height / width < 6 and 0.4 > width / height > 0.15):
                 rect_size = (int(height), int(width))
                 rect_center = (int(x), int(y))
+                # If it is rotated too much swap angle
                 if angle < -45.:
                     angle += 90.0;
-                    rect_size = swap(rect_size[0], rect_size[1])
+                    rect_size = (rect_size[1], rect_size[0])
                 m = cv2.getRotationMatrix2D((x, y), angle, 1.0)
+                # Rotate whole image and crop out the contour
                 rotated = cv2.warpAffine(image, m, (image.shape[1], image.shape[0]), cv2.INTER_CUBIC)
                 cropped = cv2.getRectSubPix(rotated, rect_size, rect_center)
+                if debug:
+                    cv2.imshow('cropped', cropped)
+                    cv2.waitKey(0)
+                    cv2.destroyAllWindows()
                 return cropped
-    return ''
-
-
-def swap(a, b):
-    return b, a
-
-
-
-## NENAUDOJAMA
-def process_plate(image, write):
-    # Convert to gray and equalize histogram
-    image = cv2.GaussianBlur(image, (5, 5), 0)
-    return image
-    img_gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    img_gray = img_gray.astype('uint8')
-    
-    img_eq = cv2.equalizeHist(img_gray)
-    blur = img_eq
-    blur = cv2.GaussianBlur(blur, (3, 3), 0)
-    
-    return blur
-    
-    th3 = cv2.adaptiveThreshold(blur, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 9, 2)
-    th2 = cv2.adaptiveThreshold(blur, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 9, 2)
-    
-    # plt.hist(img_eq.ravel(), 256)
-    # plt.show()
-    
-    # Apply gaussian filter
-    
-    # Threshold
-    
-    # th3 = cv2.adaptiveThreshold(img_filter, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
-    # ret, threshold = cv2.threshold(img_filter, find_iso_threshold(img_gray), 255, cv2.THRESH_BINARY)
-    
-    kernel = np.ones((3, 3))
-    
-    # Morph, does not work
-    img_morphed = th3
-    img_morphed = cv2.dilate(img_morphed, kernel)
-    img_morphed = cv2.erode(img_morphed, kernel)
-    
-    for x in range(1000):
-        img_morphed = cv2.morphologyEx(img_morphed, cv2.MORPH_OPEN, kernel)
-    
-    if not True:
-        cv2.imshow('Contrast enhanced with Gaussian and equalized', blur)
-        cv2.waitKey(0)
-        cv2.imshow('Equalized', img_eq)
-        cv2.waitKey(0)
-        cv2.imshow('Threshold with Median', th3)
-        cv2.waitKey(0)
-        
-        cv2.imshow('Threshold with Gaussian', th2)
-        cv2.waitKey(0)
-        cv2.imshow('Morphed binary', img_morphed)
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
-    
-    return th2
+    return None

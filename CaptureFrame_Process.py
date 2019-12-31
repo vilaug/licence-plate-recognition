@@ -4,6 +4,7 @@ import pandas as pd
 import Localization
 import Recognize
 import csv
+import numpy as np
 
 """
 In this file, you will define your own CaptureFrame_Process funtion. In this function,
@@ -20,40 +21,94 @@ Output: None
 """
 
 
-def capture_frame_process(file_path, sample_frequency, save_path):
-    if False:
-        video = 0;
+def get_first_size(img):
+    return min(250, img.shape[0]), min(250, img.shape[1])
+
+
+def get_size(img, first_size):
+    shape = img.shape
+    if first_size[0] > shape[0] or first_size[1] > shape[1]:
+        segment_size = (min(first_size[0], shape[0]), min(first_size[1], shape[1]))
+        return True, segment_size
+    else:
+        return False, first_size
+
+
+def get_segment(img, size):
+    offset_x = int(((img.shape[1] - size[1]) / 2))
+    offset_y = int((img.shape[0] - size[0]) / 2)
+    return img[offset_y:size[0], offset_x:size[1]]
+
+
+def capture_frame_process(file_path, sample_frequency, save_path, debug):
+    if not debug:
+        video = 1;
         directory = os.fsencode(file_path)
-        
+
         for file in os.listdir(directory):
             filename = os.fsdecode(file)
+
             if filename.endswith(".avi"):
-                    frame = 0
-                    times = []
-                    filename = file_path + "/"+filename
-                    capture = cv2.VideoCapture(filename)
+                print(filename)
+                frame = 1
+                times = []
+                filename = file_path + "/" + filename
+                capture = cv2.VideoCapture(filename)
+                success, img = capture.read()
+                # Information for calculating if the picture has shanged
+                seg_start = 1
+                first_frame = None
+                first_segment = None
+                first_size = None
+                distances = []
+                if success:
+                    # Get the first segment of the first fame
+                    first_frame = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+                    first_size = get_first_size(first_frame)
+                    first_segment = get_segment(first_frame, first_size)
+
+                while success:
+                    times.append(frame * sample_frequency)
+                    if frame != 1:
+                        # Get the next segment
+                        # TODO add comparison with the start of the current segment
+                        change_first, size = get_size(img, first_size)
+                        img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+                        segment = get_segment(img_gray, size)
+                        if change_first:
+                            first_segment = get_segment(first_frame, size)
+                            first_size = size
+
+                    if (frame - 1) % 6 == 0:
+                        cropped = Localization.plate_detection(img, debug)
+                        if cropped is not None:
+                            # name = file_path + '/cropped/video' + str(video) + 'frame' + str(frame) + '.png'
+                            # cv2.imwrite(name, cropped)
+                            characters = Recognize.segment_and_recognize(cropped, debug)
+                            if characters is not None:
+                                print('Video ', video, ' frame: ', frame, ' at time: ', frame * sample_frequency, 's')
+                                print(characters)
                     success, img = capture.read()
-                    while success:
-                        #image_file_path = file_path+"/frames/video" + str(video) + "frame" + str(frame) + ".jpg"
-                        #cv2.imwrite(image_file_path, img)  # save frame as JPEG file\
-                        print('Video ', video, ' frame: ', frame, ' at time: ', frame * sample_frequency, 's')
-                        times.append(frame * sample_frequency)
-                        frame += 1
-                        cropped = Localization.plate_detection(img, False)
-                        characters = Recognize.segment_and_recognize(cropped, False)
-                        success, img = capture.read()
-    
-                    text_file_path = file_path + '/frames/frame' + str(video) + '_times.txt'
-                    with open(text_file_path, 'w') as f:
-                        f.write("[")
-                        for item in times:
-                            f.write("%s," % item)
+                    frame += 1
+
+                # Write frame times
+                text_file_path = file_path + '/frames/frame' + str(video) + '_times.txt'
+                with open(text_file_path, 'w') as f:
+                    f.write("[")
+                    for item in times:
+                        f.write("%s," % item)
                         f.write("]")
-                    video+=1
+                video += 1
     else:
-        filename = file_path + "/frames/video" + str(1) + "frame" + str(1) + ".jpg"
-        img = cv2.imread(filename)
-        cropped = Localization.plate_detection(img, False)
-        characters = Recognize.segment_and_recognize(cropped, False)
-
-
+        # used for debugging
+        #TODO save frames first
+        for i in range(10):
+            name = file_path + '/frames/video' + str(9) + 'frame' + str(1 + i * 6) + '.png'
+            img = cv2.imread(name)
+            cropped = Localization.plate_detection(img, debug)
+            if cropped is not None:
+                # cv2.imwrite(name, cropped)
+                characters = Recognize.segment_and_recognize(cropped, debug)
+                if characters is not None:
+                    print(characters)
+        # characters = Recognize.segment_and_recognize(cropped, False)
