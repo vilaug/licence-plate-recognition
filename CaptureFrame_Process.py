@@ -3,8 +3,9 @@ import os
 import Localization
 import Recognize
 import csv
-import numpy as np
-import matplotlib.pyplot as plt
+import pandas as pd
+from difflib import SequenceMatcher
+from datetime import datetime
 
 """
 In this file, you will define your own CaptureFrame_Process funtion. In this function,
@@ -23,174 +24,173 @@ Output: None
 
 def capture_frame_process(file_path, sample_frequency, save_path, debug):
     if True:
+        tstart = datetime.now()
         recognized_plates = []
         recognition_frames = []
         recognition_timestamp = []
-        frame = 1
+        frame = 0
         capture = cv2.VideoCapture(file_path)
         success, img = capture.read()
-        # Information for calculating if the picture has changed
-        current_segment = None
         if not capture.isOpened():
             print("Error opening video stream or file")
         
-        current_segment = None
-        flag = False
-        cropped = None
+        current_segment1 = None
+        last_detected1 = None
+        last_category1 = None
+        current_segment2 = None
+        last_detected2 = None
+        last_category2 = None
         while success:
             if frame % sample_frequency == 0:
-                if flag:
-                    img2 = cropped
-                    img1 = img
-
-                    img1 = cv2.cvtColor(img1, cv2.COLOR_BGR2GRAY)
-                    img2 = cv2.cvtColor(img2, cv2.COLOR_BGR2GRAY)
-                    
-                    orb = cv2.create_ORB(100, 1.5)
-
-                    # find the keypoints and descriptors with SIFT
-                    kp1, des1 = orb.detectAndCompute(img1, None)
-                    kp2, des2 = orb.detectAndCompute(img2, None)
-
-                    # create BFMatcher object
-                    bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
-
-                    # Match descriptors.
-                    matches = bf.match(des1, des2)
-
-                    # Sort them in the order of their distance.
-                    matches = sorted(matches, key=lambda x: x.distance)
-
-                    # Draw first 10 matches.
-                    img3 = cv2.drawMatches(img1, kp1, img2, kp2, matches[:10], flags=2, outImg=img1)
-
-                    plt.imshow(img3), plt.show()
-                    
-                            
-                cropped = Localization.plate_detection(img, debug)
+                cropped = Localization.plate_detection(img, False)
                 if cropped is not None:
-                    characters, category = Recognize.segment_and_recognize(cropped, debug)
-                    flag = True
-                    if characters is not None:
-                        if current_segment is None:
-                            current_segment = Segment(category)
-                        print(''.join(characters))
-                        detected, detected_characters = current_segment.update_characters(characters,
-                                                                                          category)
-                        
-                        if detected:
-                            recognition_frames.append(frame)
-                            recognition_timestamp.append((frame - 1) * 1 / 12)
-                            recognized_plate = "".join(detected_characters)
-                            print(recognized_plate, frame, (frame - 1) * 1 / 12)
-                            
-                            recognized_plates.append(recognized_plate)
-                else:
-                    flag = False
+                    characters1, category1 = Recognize.segment_and_recognize(cropped, False)
+                    if characters1 is not None:
+                        if current_segment1 is None:
+                            current_segment1 = Segment(category1, frame)
+                        detected1, detected_characters1, detection_frame1 = current_segment1.update_characters(
+                            characters1,
+                            category1,
+                            last_category1,
+                            last_detected1,
+                            frame)
+                        if detected1:
+                            last_category1 = category1
+                            last_detected1 = detected_characters1
+                            print("".join(detected_characters1), detection_frame1)
+                            current_segment1 = None
+                            recognized_plates.append("".join(detected_characters1))
+                            recognition_frames.append(detection_frame1)
+                            recognition_timestamp.append((detection_frame1 - 1) / 12)
+                
             success, img = capture.read()
             frame += 1
         
         capture.release()
         with open(save_path, "w") as f:
-            wr = csv.writer(f, delimiter="\n")
-            for i in range(len(recognition_frames)):
-                wr.writeRow("".join(recognized_plates[i]) + "," + str(recognition_frames[i]) + "," +
-                            str(recognition_timestamp[i]))
+            df = pd.DataFrame({'License plate': recognized_plates, 'Frame no.': recognition_frames,
+                               'Timestamp(seconds)': recognition_timestamp})
+            result = df.to_csv(index=False)
+            f.write(result)
         if not f.closed:
             f.close()
-        os.system('evaluation.py --file_path=' + str(save_path) + ' --ground_truth_path=groundTruth.csv')
-    
-    if not debug:
+
+        # code to speed test
+
+        tend = datetime.now()
+        print (tend - tstart)
+        os.system(
+            'evaluation.py --file_path=' + str(save_path) + ' --ground_truth_path=groundTruth.csv')
+    else:
         if False:
-            video = 1
-            directory = os.fsencode(file_path)
-            
-            recognized_plates = []
-            recognition_frames = []
-            recognition_timestamp = []
-            for file in os.listdir(directory):
-                filename = os.fsdecode(file)
-                
-                if filename.endswith(".avi") or filename.endswith(".mp4"):
-                    print(video)
-                    frame = 1
-                    filename = file_path + "/" + filename
-                    capture = cv2.VideoCapture(filename)
-                    success, img = capture.read()
-                    # Information for calculating if the picture has changed
-                    current_segment = None
-                    if capture.isOpened() == False:
-                        print("Error opening video stream or file")
-                    
-                    if capture.isOpened():
-                        
-                        current_segment = None
-                        while success:
-                            if frame % samp == 0:
-                                
-                                cropped = Localization.plate_detection(img, debug)
-                                if cropped is not None:
-                                    characters, category = Recognize.segment_and_recognize(cropped, debug)
-                                    if characters is not None:
-                                        if current_segment is None:
-                                            current_segment = Segment(category)
-                                        detected, detected_characters = current_segment.update_characters(characters,
-                                                                                                          category)
-                                        
-                                        if detected:
-                                            recognized_plates.append("".join(detected_characters))
-                                            
-                                            recognition_frames.append(frame)
-                                            recognition_timestamp.append(frame - 1 * 1 / 12)
-                                            print("".join(detected_characters), frame, (frame - 1) * 1 / 12)
-                            
-                            success, img = capture.read()
-                            frame += 1
-                    capture.release()
-                    video += 1
-    
-    elif False:
-        # used for debugging
-        # TODO not working: 2, 3, 7, 17, 26, 31(no detection)
-        for i in range(1, 36):
-            name = file_path + '/frames/video' + str(18) + 'frame' + str(i * 3) + '.png'
-            img = cv2.imread(name)
-            cropped = Localization.plate_detection(img, debug)
-            if cropped is not None:
-                # cv2.imwrite(name, cropped)
-                characters = Recognize.segment_and_recognize(cropped, debug)
+            for i in range(1, 36):
+                name = 'TrainingSet/Categorie I/frames/video' + str(19) + 'frame' + str(i * 3) + '.png'
+                print(name)
+                img = cv2.imread(name)
+                cropped, location = Localization.plate_detection(img, True)
+                if cropped is not None:
+                    characters, category = Recognize.segment_and_recognize(cropped, True)
                 if characters is not None:
                     print(characters)
+        else:
+            frame = 1
+            capture = cv2.VideoCapture('TrainingSet/Categorie III/Video47_2.avi')
+            success, img = capture.read()
+            if not capture.isOpened():
+                print("Error opening video stream or file")
+            current_segment = None
+            last_detected = None
+            last_category = None
+            while success:
+                if frame % sample_frequency == 0:
+                    first, first_location, second, second_location, found_two = Localization.plate_detection(img, True)
+                    if found_two:
+                        print(found_two)
+                    if first is not None:
+                        characters, category = Recognize.segment_and_recognize(first, True)
+                        if characters is not None:
+                            if current_segment is None:
+                                current_segment = Segment(category, frame)
+                            detected, detected_characters, detection_frame = current_segment.update_characters(
+                                characters,
+                                category,
+                                last_category,
+                                last_detected,
+                                frame)
+                            if detected:
+                                last_category = category
+                                last_detected = detected_characters
+                                print("".join(detected_characters))
+                                current_segment = None
+                success, img = capture.read()
+                frame += 1
+    
+    capture.release()
+
+
+def order(first, first_location, second, second_location):
+    (x1, y1), (height1, width1), angle1 = first_location
+    (x2, y2), (height2, width2), angle1 = second_location
+    if width1 < 85 and height1 > 85:
+        x1, y1 = y1, x1
+    if width2 < 85 and height2 > 85:
+        x2, y2 = y2, x2
+    if x1 > x2:
+        return second, first
+    else:
+        return first, second
 
 
 class Segment:
-    def __init__(self, category):
+    def __init__(self, category, frame):
         self.characters = [''] * 8
         self.detected_characters = ['a'] * 8
+        
         self.times_detected = 0
         self.category = category
+        self.last_Frame = frame
         self.wrong_hits = 0
         self.detected = False
     
-    def update_characters(self, characters, category):
-        if self.category != category:
-            if self.detected or self.wrong_hits > 2:
-                self.__init__(category)
+    def update_characters(self, characters, category, last_category, last_characters, frame):
+        if last_category is not None:
+            if category != self.category or similar(characters, last_characters) < 0.5:
+                if self.times_detected == 1:
+                    save_char = self.characters
+                    save_frame = self.last_Frame
+                    self.__init__(category, frame)
+                    return True, save_char, save_frame
+                elif self.times_detected > 1:
+                    if last_category == self.category and similar(characters, last_characters) > 0.5:
+                        for i, char in enumerate(last_characters):
+                            if self.characters[i] is not None:
+                                self.characters[i] = self.characters[i] + char
+                            else:
+                                self.characters[i] = characters[i]
+                            self.times_detected += 1
+                            self.detected = self.__check_if_detected()
+                            self.last_Frame = frame
+                            if self.detected:
+                                save_char = self.characters
+                                save_frame = self.last_Frame
+                                self.__init__(category, frame)
+                                return True, save_char, save_frame
+                            else:
+                                return False, None, None
+                    else:
+                        self.__init__(category, frame)
+        
+        for i, char in enumerate(characters):
+            if self.characters[i] is not None:
+                self.characters[i] = self.characters[i] + char
             else:
-                self.wrong_hits += 1
-        if not self.detected:
-            for i, char in enumerate(characters):
-                if self.characters[i] is not None:
-                    self.characters[i] = self.characters[i] + char
-                else:
-                    self.characters[i] = characters[i]
-            self.times_detected += 1
-            self.detected = self.__check_if_detected()
-            if self.detected:
-                return self.detected, self.detected_characters
-            return self.detected, None
-        else:
-            return False, None
+                self.characters[i] = characters[i]
+        self.times_detected += 1
+        self.detected = self.__check_if_detected()
+        self.last_Frame = frame
+        if self.detected:
+            return self.detected, self.detected_characters, self.last_Frame
+        return self.detected, None, None
     
     def __get_max_occurring_char(self, chars):
         count = [0] * 256
@@ -212,7 +212,7 @@ class Segment:
             return c
     
     def __check_if_detected(self):
-        if self.times_detected < 3:
+        if self.times_detected < 5:
             return False
         else:
             for i in range(8):
@@ -224,3 +224,9 @@ class Segment:
                     else:
                         self.detected_characters[i] = char
         return True
+
+
+def similar(a, b):
+    if a is None or b is None:
+        return 0
+    return SequenceMatcher(None, a, b).ratio()

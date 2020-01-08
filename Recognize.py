@@ -8,6 +8,7 @@ from scipy import ndimage as ndi
 from Characters import extractFromTTF
 from sklearn import cluster
 import string
+import time
 
 """
 In this file, you will define your own segment_and_recognize function.
@@ -44,14 +45,18 @@ def segment(image, debug):
     
     # Find elevation map from sobel edge detection
     elevation_map = sobel(blur1)
-    # find 3 largest clusters and place markers there. 1st should always be the letters
-    # Could be improved
-    means = cluster.KMeans(n_clusters=3, max_iter=100, algorithm="elkan").fit(blur1.reshape(-1, 1))
-    centers = means.cluster_centers_
-    centers = sorted(centers)
+    
+    # Place the markers in the interest points
+    # less than 35 is black and should be the characters
+    # more than 80 should be the background
     markers = np.zeros_like(blur1)
-    markers[image_gray < centers[0] - 10] = 2
-    markers[image_gray > centers[1]] = 1
+    markers[image_gray < 35] = 2
+    markers[image_gray > 80] = 1
+    
+    # Segments the characters using morphology watershed operation
+    # Which behaves as a water shed in real life
+    # Takes the elevation map from sobel edge detections and markers
+    # For what to consider objects and what to consider background.
     segmentation = morphology.watershed(elevation_map, markers)
     
     if debug:
@@ -64,7 +69,6 @@ def segment(image, debug):
     
     # Fill the holes
     segmentation_fill = ndi.binary_fill_holes(segmentation - 1)
-    # dnp.set_printoptions(threshold=sys.maxsize)
     if debug:
         fig, ax = plt.subplots(figsize=(4, 3))
         ax.imshow(segmentation_fill, cmap=plt.cm.gray, interpolation='nearest')
@@ -72,7 +76,9 @@ def segment(image, debug):
         ax.set_title('fill')
         fig.show()
     
-    # Change to greyscale image
+    # Change to greyscale image, since it is now a boolean array containing
+    # True where an object was detected
+    # False where background was found
     segmentation_s = np.where(segmentation_fill, 0, 255)
     segmentation_s = segmentation_s.astype(np.uint8)
     if debug:
@@ -80,7 +86,7 @@ def segment(image, debug):
         cv2.waitKey(0)
         cv2.destroyAllWindows()
     
-    # Erode
+    # Make the characters thinner
     segmentation_s = cv2.dilate(segmentation_s, np.ones((5, 5)), iterations=1)
     segmentation_s = cv2.erode(segmentation_s, np.ones((3, 3)), iterations=1)
     segmentation_s = cv2.dilate(segmentation_s, np.ones((3, 3)), iterations=1)
@@ -88,7 +94,11 @@ def segment(image, debug):
     
     # Get labeled image segments
     segmentation_fill = np.where(segmentation_s == 255, False, True)
+    
+    # Label the coins based on regions where a 'whole' object was detected
     labeled_coins, n_objects = ndi.label(segmentation_fill)
+    
+    # Sort the objects by x coordinate
     slices = ndi.find_objects(labeled_coins)
     slices = sorted(slices, key=lambda slice: slice[1].start)
     possible_chars = []
@@ -112,7 +122,7 @@ def segment(image, debug):
             else:
                 last_end = slices[i][1].stop
             possible_chars.append(curr_segment)
-            if debug:
+            if False:
                 cv2.imshow('segment', curr_segment)
                 
                 cv2.waitKey()
@@ -124,10 +134,11 @@ def segment(image, debug):
     # CATEGORY 1 - xx - xxx - x
     # CATEGORY 2 - xx - xx - xx
     # CATEGORY 3 - xxx - xx - x
-    if len(possible_chars) == 8:
+    if len(possible_chars) == 8 and len(ends) == 2:
         if ends[0] == 1 and ends[1] == 4:
             return get_characters(possible_chars, debug, 0)
         elif ends[0] == 2:
+            
             if ends[1] == 5:
                 return get_characters(possible_chars, debug, 1)
             elif ends[1] == 4:
@@ -196,17 +207,20 @@ def is_digits(best_index, best_digit, category):
             is_digits_arr = np.array([False, True, False])
             new_category = 3.1
     return is_digits_arr, new_category
-
+    
     # CATEGORY 0    x - xxx - xx
     # CATEGORY 1    xx - xxx - x
     # CATEGORY 2    xx - xx - xx
     # CATEGORY 3    xxx - xx - x
+
+
 def get_category_slices(category):
     if category == 0:
         return [(0, 1), (2, 5), (6, 8)]
     elif category == 1:
         return [(0, 2), (3, 6), (7, 8)]
     elif category == 2:
+        
         return [(0, 2), (3, 5), (6, 8)]
     elif category == 3:
         return [(0, 3), (4, 6), (7, 8)]
@@ -231,6 +245,7 @@ def get_characters(chars, debug, category):
                     char_index = int(errors[j][count][0])
                     while characters[char_index] not in string.digits:
                         count += 1
+                        char_index = int(errors[j][count][0])
                     if count != 0:
                         recognized_chars[j] = characters[char_index]
             else:
@@ -238,8 +253,8 @@ def get_characters(chars, debug, category):
                     count = 0
                     char_index = int(errors[j][count][0])
                     while characters[char_index] in string.digits:
-                        print(characters[char_index])
                         count += 1
+                        char_index = int(errors[j][count][0])
                     if count != 0:
                         recognized_chars[j] = characters[char_index]
         return recognized_chars, category
@@ -269,7 +284,7 @@ def recognize(chars, debug):
             # Sort the errors
             
             errors[i] = errors[i][errors[i][:, 1].argsort()]
-            if debug:
+            if False:
                 cv2.imshow('segment', char)
                 cv2.imshow('stock', stock_chars[int(errors[i][0][0])])
                 cv2.waitKey(0)

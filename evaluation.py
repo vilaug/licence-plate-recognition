@@ -4,8 +4,8 @@ import numpy as np
 # ground turth header: 'License plate', 'Timestamp', 'First frame', 'Last frame', 'Category'
 def get_args():
 	parser = argparse.ArgumentParser()
-	parser.add_argument('--file_path', type=str, default=None)
-	parser.add_argument('--ground_truth_path', type=str, default=None)
+	parser.add_argument('--file_path', type=str, default='result.csv')
+	parser.add_argument('--ground_truth_path', type=str, default='groundTruth.csv')
 	args = parser.parse_args()
 	return args
 
@@ -18,14 +18,14 @@ if __name__ == '__main__':
 	# firstFrames = ground_truth['First frame'].tolist()
 	# lastFrames = ground_truth['Last frame'].tolist()
 	result = np.zeros((totalPlates, 4))
-	# 0: TP, 1: FP, 3: LTP
+	# 0: TP, 1: FP, 2: LTP
 
 
 	# Find the last frame and number of plates for each category
 	numCategories = len(ground_truth['Category'].unique())
 	numPlates = np.zeros(numCategories)
 	lastframe = np.zeros(numCategories)
-	for i,x in enumerate(ground_truth['Category'].unique()):
+	for i, x in enumerate(ground_truth['Category'].unique()):
 		numPlates[i] = len(ground_truth[ground_truth['Category']==x])
 		lastframe[i] = ground_truth[ground_truth['Category']==x]['Last frame'].tolist()[-1]
 	# For each line in the input list
@@ -40,25 +40,16 @@ if __name__ == '__main__':
 			solutionPlate = ground_truth['License plate'][index]
 			solutionTimeStamp = ground_truth['Timestamp'][index]
 			if licensePlate == solutionPlate:
-				if timeStamp <= solutionTimeStamp + 0.5:
+				if timeStamp <= solutionTimeStamp + 2:
 					result[index, 0] += 1
 				else:
 					result[index, 2] += 1
+				if j == 1:
+					result[index-1, 1] -= 1
+				elif j == 0:
+					break
 			else:
 				result[index, 1] += 1
-	# Remove FPs that have been wrongly counted
-	for i in range(totalPlates-1):
-		if ground_truth['Timestamp'][i] == ground_truth['Timestamp'][i+1]:
-			temp = result[i,1]
-			result[i, 1] -= result[i+1, 1]
-			result[i+1, 1] -= temp
-			if result[i, 1] % 2 == 1:
-				result[i, 1] -= 1
-				result[i+1, 1] += 1
-			result[i, 1] /= 2
-			result[i+1, 1] /= 2
-
-
 
 	# Initialize arrays to save the final results per category
 	TP = np.zeros(numCategories)
@@ -69,7 +60,7 @@ if __name__ == '__main__':
 	print('---------------------------------------------------------')
 	print('%20s'%'License plate', '%10s'%'Result')
 	for i in range(totalPlates):
-		cat = ground_truth['Category'][i]-1
+		cat = int(ground_truth['Category'][i]-1)
 		if result[i, 0] + result[i, 2] + result[i, 1] == 0:
 			finalResult = 'FN'
 			FN[cat] += 1
@@ -95,6 +86,7 @@ if __name__ == '__main__':
 
 	output = np.zeros((5, numCategories*2+2))
 	for i in range(numCategories):
+		
 		output[0, 2*i] = TP[i]
 		output[0, 2*i+1] = TP[i]/numPlates[i]*100
 		output[1, 2*i] = FP[i]

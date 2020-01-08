@@ -9,7 +9,7 @@ def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--file_path', type=str, default='trainingsvideo.avi')
     parser.add_argument('--output_path', type=str, default='result.csv')
-    parser.add_argument('--sample_frequency', type=int, default=3)
+    parser.add_argument('--sample_frequency', type=int, default=2)
     args = parser.parse_args()
     return args
 
