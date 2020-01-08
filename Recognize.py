@@ -1,34 +1,31 @@
 import cv2
 import numpy as np
-import matplotlib.pyplot as plt
 import sys
 from skimage.filters import sobel
 from skimage import morphology
 from scipy import ndimage as ndi
 from Characters import extractFromTTF
-from sklearn import cluster
 import string
-import time
 
 """
 In this file, you will define your own segment_and_recognize function.
 To do:
-	1. Segment the plates character by character
-	2. Compute the distances between character images and reference character images(in the folder of 'SameSizeLetters' and 'SameSizeNumbers')
-	3. Recognize the character by comparing the distances
+1. Segment the plates character by character
+2. Compute the distances between character images and reference character images(in the folder of 'SameSizeLetters' and 'SameSizeNumbers')
+3. Recognize the character by comparing the distances
 Inputs:(One)
-	1. plate_imgs: cropped plate images by Localization.plate_detection function
-	type: list, each element in 'plate_imgs' is the cropped image(Numpy array)
+1. plate_imgs: cropped plate images by Localization.plate_detection function
+type: list, each element in 'plate_imgs' is the cropped image(Numpy array)
 Outputs:(One)
-	1. recognized_plates: recognized plate characters
-	type: list, each element in recognized_plates is a list of string(Hints: the element may be None type)
+1. recognized_plates: recognized plate characters
+type: list, each element in recognized_plates is a list of string(Hints: the element may be None type)
 Hints:
-	You may need to define other functions.
+You may need to define other functions.
 """
 
 
-def segment_and_recognize(image, debug):
-    return segment(image, debug)
+def segment_and_recognize(image):
+    return segment(image)
 
 
 def segment(image, debug):
@@ -37,11 +34,8 @@ def segment(image, debug):
     image_gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     image_gray = cv2.equalizeHist(image_gray)
     
-    # Apply bilateral filter
+    # Apply gaussian filter
     blur1 = cv2.GaussianBlur(image_gray, (5, 5), cv2.BORDER_DEFAULT)
-    if debug:
-        cv2.imshow('Contrast enhanced and equalized', blur1)
-        cv2.waitKey()
     
     # Find elevation map from sobel edge detection
     elevation_map = sobel(blur1)
@@ -55,36 +49,19 @@ def segment(image, debug):
     
     # Segments the characters using morphology watershed operation
     # Which behaves as a water shed in real life
-    # Takes the elevation map from sobel edge detections and markers
+    # Takes the elevation map from sobel edge detection and markers
     # For what to consider objects and what to consider background.
     segmentation = morphology.watershed(elevation_map, markers)
     
-    if debug:
-        fig, ax = plt.subplots(figsize=(4, 3))
-        ax.imshow(segmentation, cmap=plt.cm.gray, interpolation='nearest')
-        ax.axis('off')
-        ax.set_title('segmentation')
-        fig.show()
-        np.set_printoptions(threshold=sys.maxsize)
     
     # Fill the holes
     segmentation_fill = ndi.binary_fill_holes(segmentation - 1)
-    if debug:
-        fig, ax = plt.subplots(figsize=(4, 3))
-        ax.imshow(segmentation_fill, cmap=plt.cm.gray, interpolation='nearest')
-        ax.axis('off')
-        ax.set_title('fill')
-        fig.show()
     
     # Change to greyscale image, since it is now a boolean array containing
     # True where an object was detected
     # False where background was found
     segmentation_s = np.where(segmentation_fill, 0, 255)
     segmentation_s = segmentation_s.astype(np.uint8)
-    if debug:
-        cv2.imshow('seg', segmentation_s)
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
     
     # Make the characters thinner
     segmentation_s = cv2.dilate(segmentation_s, np.ones((5, 5)), iterations=1)
@@ -111,7 +88,6 @@ def segment(image, debug):
         curr_segment = np.where(curr_segment > 1, 255, 0)
         curr_segment = curr_segment.astype(np.uint8)
         (height, width) = curr_segment.shape
-        # print(width/height, height/width)
         if width / height < 0.9 and height / width > 1.1 and height > image.shape[0] * 0.5:
             if last_end == 0:
                 last_end = slices[i][1].stop
@@ -122,23 +98,11 @@ def segment(image, debug):
             else:
                 last_end = slices[i][1].stop
             possible_chars.append(curr_segment)
-            if False:
-                cv2.imshow('segment', curr_segment)
-                
-                cv2.waitKey()
-                cv2.destroyAllWindows()
             index += 1
-    
-    cv2.destroyAllWindows()
-    # CATEGORY 0 -  x - xxx - xx
-    # CATEGORY 1 - xx - xxx - x
-    # CATEGORY 2 - xx - xx - xx
-    # CATEGORY 3 - xxx - xx - x
     if len(possible_chars) == 8 and len(ends) == 2:
         if ends[0] == 1 and ends[1] == 4:
             return get_characters(possible_chars, debug, 0)
         elif ends[0] == 2:
-            
             if ends[1] == 5:
                 return get_characters(possible_chars, debug, 1)
             elif ends[1] == 4:
@@ -175,7 +139,7 @@ def find_best_digit(recognized_chars, errors):
     # CATEGORY 3.1  XXX - 99 - X
 
 
-def is_digits(best_index, best_digit, category):
+def is_digits(best_index, category):
     is_digits_arr = None
     new_category = category
     if category == 0:
@@ -226,17 +190,16 @@ def get_category_slices(category):
         return [(0, 3), (4, 6), (7, 8)]
 
 
-def get_characters(chars, debug, category):
-    characters, recognized_chars, errors = recognize(chars, debug)
+def get_characters(chars, category):
+    characters, recognized_chars, errors = recognize(chars)
     best_index, best_digit, = find_best_digit(recognized_chars, errors)
     slices = get_category_slices(category)
-    is_digits_arr, category = is_digits(best_index, best_digit, category)
+    is_digits_arr, category = is_digits(best_index, category)
     
     # CATEGORY 0    x - xxx - xx
     # CATEGORY 1    xx - xxx - x
     # CATEGORY 2    xx - xx - xx
     # CATEGORY 3    xxx - xx - x
-    j = 0
     if is_digits_arr is not None:
         for i, is_digit in enumerate(is_digits_arr):
             if is_digit:
@@ -262,12 +225,10 @@ def get_characters(chars, debug, category):
         return None, None
 
 
-def recognize(chars, debug):
+def recognize(chars):
     stock_chars, stock_numbers = extractFromTTF.get_stock_characters()
     recognized_chars = []
     characters = string.digits + string.ascii_uppercase
-    # TODO implement character/digit combination check
-    last_start = 0
     errors = np.zeros((8, len(stock_chars), 2))
     # Go through each char and calculate mean square error, maybe switch to SSIM
     for (i, char) in enumerate(chars):
@@ -282,16 +243,9 @@ def recognize(chars, debug):
                 errors[i][j] = [j, error]
             
             # Sort the errors
-            
             errors[i] = errors[i][errors[i][:, 1].argsort()]
-            if False:
-                cv2.imshow('segment', char)
-                cv2.imshow('stock', stock_chars[int(errors[i][0][0])])
-                cv2.waitKey(0)
-                cv2.destroyAllWindows()
+            # Assign the character with the lowest error
             recognized_chars.append(characters[int(errors[i][0][0])])
-            if False:
-                recognized_chars.append('(' + characters[int(errors[i][1][0])] + ')')
     return characters, recognized_chars, errors
 
 
