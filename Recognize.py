@@ -28,7 +28,7 @@ def segment_and_recognize(image):
     return segment(image)
 
 
-def segment(image, debug):
+def segment(image):
     # Resize the image, convert to gray and equalize histogram
     image = cv2.resize(image, (int(image.shape[1] * (100 / image.shape[0])), 100))
     image_gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
@@ -49,7 +49,7 @@ def segment(image, debug):
     
     # Segments the characters using morphology watershed operation
     # Which behaves as a water shed in real life
-    # Takes the elevation map from sobel edge detection and markers
+    # Takes the elevation map from Sobel edge detection and markers
     # For what to consider objects and what to consider background.
     segmentation = morphology.watershed(elevation_map, markers)
     
@@ -101,14 +101,14 @@ def segment(image, debug):
             index += 1
     if len(possible_chars) == 8 and len(ends) == 2:
         if ends[0] == 1 and ends[1] == 4:
-            return get_characters(possible_chars, debug, 0)
+            return get_characters(possible_chars, 0)
         elif ends[0] == 2:
             if ends[1] == 5:
-                return get_characters(possible_chars, debug, 1)
+                return get_characters(possible_chars, 1)
             elif ends[1] == 4:
-                return get_characters(possible_chars, debug, 2)
+                return get_characters(possible_chars, 2)
         elif ends[0] == 3 and ends[1] == 5:
-            return get_characters(possible_chars, debug, 3)
+            return get_characters(possible_chars, 3)
     
     return None, None
 

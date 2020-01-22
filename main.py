@@ -24,4 +24,4 @@ if __name__ == '__main__':
     file_path = args.file_path
     sample_frequency = args.sample_frequency
     
-    CaptureFrame_Process.capture_frame_process(file_path, sample_frequency, output_path, False)
+    CaptureFrame_Process.capture_frame_process(file_path, sample_frequency, output_path)
