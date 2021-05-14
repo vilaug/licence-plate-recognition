@@ -1,2 +1,6 @@
 ## Usage:
-Type the name of the video in main.py and run it, results will be saved in result.csv file.
+Run the main.py file with --file-path="path to your video".
+
+## Results
+
+Results will be found in results.csv file be default, containing all license plates found in the video in the order they were detected.
